@@ -3,4 +3,5 @@
 __pycache__/
 */__pycache__/
 data/
+checkpoints/
 README.md
