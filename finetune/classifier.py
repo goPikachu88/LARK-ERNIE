@@ -19,6 +19,8 @@ from __future__ import print_function
 
 import time
 import numpy as np
+from sklearn.metrics import classification_report
+from sklearn.metrics import f1_score, precision_score, recall_score
 
 from six.moves import xrange
 import paddle.fluid as fluid
@@ -182,7 +184,7 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
             qids.extend(np_qids.reshape(-1).tolist())
             scores.extend(np_probs[:, 1].reshape(-1).tolist())
             np_preds = np.argmax(np_probs, axis=1).astype(np.float32)
-            total_label_pos_num += np.sum(np_labels)
+            total_label_pos_num += np.sum(np_labels)    # only for binary classification
             total_pred_pos_num += np.sum(np_preds)
             total_correct_num += np.sum(np.dot(np_preds, np_labels))
         except fluid.core.EOFException:
@@ -211,3 +213,57 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
             % (eval_phase, total_cost / total_num_seqs,
                total_acc / total_num_seqs, mrr, map, p, r, f, total_num_seqs,
                time_end - time_begin))
+
+
+def evaluate_ske(exe, test_program, test_pyreader, graph_vars, eval_phase):
+    test_pyreader.start()
+    total_cost, total_acc, total_num_seqs, total_label_pos_num, total_pred_pos_num, total_correct_num = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    preds, labels, scores = [], [], []
+    time_begin = time.time()
+    current_batch = 0
+
+    fetch_list = [
+        graph_vars["loss"].name, graph_vars["accuracy"].name,
+        graph_vars["probs"].name, graph_vars["labels"].name,
+        graph_vars["num_seqs"].name, graph_vars["qids"].name
+    ]
+    while True:     # evaluate by batch
+        try:
+            batch_time_begin = time.time()
+            np_loss, np_acc, np_probs, np_labels, np_num_seqs, np_qids = exe.run(
+                program=test_program, fetch_list=fetch_list)
+            np_preds = np.argmax(np_probs, axis=1).astype(np.int8)
+            total_cost += np.sum(np_loss * np_num_seqs)
+            total_acc += np.sum(np_acc * np_num_seqs)
+            total_num_seqs += np.sum(np_num_seqs)
+            labels.extend(np_labels.reshape((-1)).tolist())
+            preds.extend(np_preds.tolist())
+            print('batch %d, elapsed time: %f' % (current_batch, time.time()-batch_time_begin))
+            current_batch += 1
+
+        except fluid.core.EOFException:
+            test_pyreader.reset()
+            break
+    time_end = time.time()
+
+    # calculate p, r f1
+    micro_r = recall_score(y_true=labels, y_pred=preds, average='micro')
+    micro_p = precision_score(y_true=labels, y_pred=preds, average='micro')
+
+    macro_r = recall_score(y_true=labels, y_pred=preds, average='macro')
+    macro_p = precision_score(y_true=labels, y_pred=preds, average='macro')
+
+    if not micro_p or not macro_p:
+        micro_f, macro_f = 0.0, 0.0
+    else:
+        micro_f = 2 * micro_p * micro_r / (micro_p + micro_r)
+        macro_f = 2 * macro_p * macro_r / (macro_p + macro_r)
+
+    print(
+        "[%s evaluation] ave loss: %f, ave_acc: %f, macro_p: %f, macro_r: %f, macro_f: %f, micro_p: %f, micro_r: %f, micro_f: %f, data_num: %d, elapsed time: %f s"
+        % (eval_phase, total_cost / total_num_seqs,
+           total_acc / total_num_seqs,
+           macro_p, macro_r, macro_f,
+           micro_p, micro_r, micro_f,
+           total_num_seqs,
+           time_end - time_begin))

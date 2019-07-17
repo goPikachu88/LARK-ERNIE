@@ -26,6 +26,7 @@ import paddle.fluid as fluid
 import reader.task_reader as task_reader
 from model.ernie import ErnieConfig
 from finetune.classifier import create_model, evaluate
+from finetune.classifier import evaluate_ske
 from optimization import optimization
 from utils.args import print_arguments
 from utils.init import init_pretraining_params, init_checkpoint
@@ -267,7 +268,8 @@ def main(args):
                 epoch=1,
                 shuffle=False))
         print("Final test result:")
-        evaluate(exe, test_prog, test_pyreader, graph_vars, "test")
+        # evaluate(exe, test_prog, test_pyreader, graph_vars, "test")
+        evaluate_ske(exe, test_prog, test_pyreader, graph_vars, "test")
 
 
 if __name__ == '__main__':
