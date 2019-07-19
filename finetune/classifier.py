@@ -238,7 +238,8 @@ def evaluate_ske(exe, test_program, test_pyreader, graph_vars, eval_phase):
             total_num_seqs += np.sum(np_num_seqs)
             labels.extend(np_labels.reshape((-1)).tolist())
             preds.extend(np_preds.tolist())
-            print('batch %d, elapsed time: %f' % (current_batch, time.time()-batch_time_begin))
+            if current_batch % 100 == 0:
+                print('batch %d, elapsed time: %f' % (current_batch, time.time()-batch_time_begin))
             current_batch += 1
 
         except fluid.core.EOFException:
