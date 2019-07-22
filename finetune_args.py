@@ -49,6 +49,7 @@ train_g.add_arg("loss_scaling",      float,  1.0,
 log_g = ArgumentGroup(parser,     "logging", "logging related.")
 log_g.add_arg("skip_steps",          int,    10,    "The steps interval to print loss.")
 log_g.add_arg("verbose",             bool,   False, "Whether to output verbose log.")
+log_g.add_arg("save_log",             bool,   False, "Whether to save log file.")
 
 data_g = ArgumentGroup(parser, "data", "Data paths, vocab paths and data processing options")
 data_g.add_arg("train_set",           str,  None,  "Path to training data.")
