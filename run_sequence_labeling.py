@@ -191,9 +191,10 @@ def main(args):
         if warmup_steps > 0:
             graph_vars["learning_rate"] = scheduled_lr
 
-        if args.save_log:
-            with open('%s/log.txt' % args.checkpoints, 'w') as logfile:
+        if args.save_log and args.log_path:
+            with open(args.log_path, 'w') as logfile:
                 logfile.write(time.asctime())
+            print('Writing logs into %s' % args.log_path)
 
         time_begin = time.time()
         while True:
@@ -222,8 +223,9 @@ def main(args):
                              steps, outputs["loss"], outputs["f1"],
                              outputs["precision"], outputs["recall"],
                              args.skip_steps / used_time))
-                    if args.save_log:
-                        with open('%s/log.txt' % args.checkpoints, 'a') as logfile:
+
+                    if args.save_log and args.log_path:
+                        with open(args.log_path, 'a') as logfile:
                             logfile.write("epoch: %d, progress: %d/%d, step: %d, loss: %f, " \
                                        "f1: %f, precision: %f, recall: %f" % (
                                 current_epoch,current_example, num_train_examples,
