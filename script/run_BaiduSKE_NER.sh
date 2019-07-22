@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -eux
 
 export FLAGS_sync_nccl_allreduce=1
@@ -32,4 +33,5 @@ python -u run_sequence_labeling.py \
                    --learning_rate 5e-5 \
                    --skip_steps 1000 \
                    --num_iteration_per_drop_scope 1 \
-                   --random_seed 1
+                   --random_seed 1 \
+                   --save_log true

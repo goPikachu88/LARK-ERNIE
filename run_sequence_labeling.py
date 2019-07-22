@@ -192,7 +192,7 @@ def main(args):
             graph_vars["learning_rate"] = scheduled_lr
 
         if args.save_log:
-            with open('%s/log.txt', 'w') as logfile:
+            with open('%s/log.txt' % args.checkpoints, 'w') as logfile:
                 logfile.write(time.asctime())
 
         time_begin = time.time()
@@ -223,7 +223,7 @@ def main(args):
                              outputs["precision"], outputs["recall"],
                              args.skip_steps / used_time))
                     if args.save_log:
-                        with open('%s/log.txt', 'a') as logfile:
+                        with open('%s/log.txt' % args.checkpoints, 'a') as logfile:
                             logfile.write("epoch: %d, progress: %d/%d, step: %d, loss: %f, " \
                                        "f1: %f, precision: %f, recall: %f" % (
                                 current_epoch,current_example, num_train_examples,
