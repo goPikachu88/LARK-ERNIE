@@ -111,10 +111,17 @@ class NERTransformer(BaseTransformer):
         obj_start, obj_end = self._find_sublist_boundary(obj_tokens, text_tokens)
 
         # Add entity BIO labels
-        labels[subj_start] = 'B-%s-subj' % instance['subj_type']
-        labels[subj_start+1 : subj_end+1] = ['I-%s-subj' % instance['subj_type']] * (len(subj_tokens)-1)
-        labels[obj_start] = 'B-%s-obj' % instance['obj_type']
-        labels[obj_start+1 : obj_end+1] = ['I-%s-obj' % instance['obj_type']] * (len(obj_tokens)-1)
+        # 65 labels
+        # labels[subj_start] = 'B-%s-subj' % instance['subj_type']
+        # labels[subj_start+1 : subj_end+1] = ['I-%s-subj' % instance['subj_type']] * (len(subj_tokens)-1)
+        # labels[obj_start] = 'B-%s-obj' % instance['obj_type']
+        # labels[obj_start+1 : obj_end+1] = ['I-%s-obj' % instance['obj_type']] * (len(obj_tokens)-1)
+
+        # 57 labels
+        labels[subj_start] = 'B-%s' % instance['subj_type']
+        labels[subj_start+1 : subj_end+1] = ['I-%s' % instance['subj_type']] * (len(subj_tokens)-1)
+        labels[obj_start] = 'B-%s' % instance['obj_type']
+        labels[obj_start+1 : obj_end+1] = ['I-%s' % instance['obj_type']] * (len(obj_tokens)-1)
 
         # print('subj:', text_tokens[subj_start:subj_end+1], labels[subj_start:subj_end+1])
         # print('obj:', text_tokens[obj_start:obj_end+1], labels[obj_start:obj_end+1])
@@ -156,12 +163,12 @@ def main():
     args = arg_parse()
 
     data_original = [json.loads(line) for line in args.data]
+
     # transformer = RelationTransformer(label_map = json.load(label_map=args.label_map))
-    transformer = NERTransformer(label_map = json.load(label_map=None))
+    transformer = NERTransformer(label_map = None)
 
     transformed = transformer.transform(data_original)
-
-    pprint(transformed)
+    # pprint(transformed)
     write2tsv(f = args.output, unpacked = transformed)
 
 
