@@ -19,7 +19,6 @@ from tokenization import FullTokenizer
 
 class BaseTransformer(object):
     def __init__(self, label_map):
-        # self.label_map = json.load(open(label_map, 'r'))
         self.label_map = label_map
 
     def transform(self, data):
@@ -36,12 +35,30 @@ class BaseTransformer(object):
                                      relation=spo['predicate'],
                                      subj=spo['subject'],
                                      obj=spo['object'],
+                                     # subj_type=self.label_map[spo['subject_type']],
+                                     # obj_type=self.label_map[spo['object_type']],
                                      subj_type=spo['subject_type'],
-                                     obj_type=spo['object_type']))
+                                     obj_type=spo['object_type'],
+                                     )
+                                )
         print('Unpacked SPO: %d' % len(unpacked))
         random.Random(4).shuffle(unpacked)
 
-        return [self._transform_one(d) for d in unpacked]
+        # return [self._transform_one(d) for d in unpacked]
+        transformed = []
+        error_idx = []
+        for i, d in enumerate(unpacked):
+            if i % 10000 == 0:
+                print('Processed %d unpacked examples.' % i)
+            try:
+                o = self._transform_one(d)
+            except:
+                o = {}          # maybe more robust to skip the instance than to return {}?
+                error_idx.append(i)
+            transformed.append(o)
+        print('%d examples cannot be transformed.' % len(error_idx))
+        print(error_idx)
+        return transformed
 
 
     def _transform_one(self, instance):
@@ -71,6 +88,7 @@ class RelationTransformer(BaseTransformer):
                     # label=self.label_map.get(instance['relation'], 0),
                     label=instance['relation'],
                     )
+
 
 class NERTransformer(BaseTransformer):
     def __init__(self, sep=u"", **kwargs):
@@ -105,6 +123,9 @@ class NERTransformer(BaseTransformer):
                     label=self.sep.join(labels))
 
     def _find_sublist_boundary(self, sublist, full_list):
+        '''
+        Todo: A few instances cannot find sublist boundary.
+        '''
         for start in (i for i, v in enumerate(full_list) if v==sublist[0]):
             if full_list[start : start+len(sublist)] == sublist:
                 return (start, start+len(sublist)-1)
@@ -123,11 +144,10 @@ def write2tsv(f, unpacked):
 def arg_parse():
     parser = ArgumentParser()
     parser.add_argument('--data', type=FileType('r'),
-                        default='/home/yue/Data/ernie_processed/dev_data_postag.json',
                         help='Input json file')
-    parser.add_argument('--label_map', type=FileType('r'), default=None,
-                        help='Label map json file.')
-    parser.add_argument('--output', type=FileType('w'), default='/home/yue/Desktop/test.tsv',
+    # parser.add_argument('--label_map', type=FileType('r'), default=None,
+    #                     help='Label map to convert CHN labels to EN.')
+    parser.add_argument('--output', type=FileType('w'),
                         help='Output tsv file')
     return parser.parse_args()
 
@@ -135,9 +155,9 @@ def arg_parse():
 def main():
     args = arg_parse()
 
-    data_original = [json.loads(line) for line in args.data][:5]
-    # transformer = RelationTransformer(label_map = json.load(args.label_map))
-    transformer = NERTransformer(label_map = json.load(args.label_map))
+    data_original = [json.loads(line) for line in args.data]
+    # transformer = RelationTransformer(label_map = json.load(label_map=args.label_map))
+    transformer = NERTransformer(label_map = json.load(label_map=None))
 
     transformed = transformer.transform(data_original)
 
