@@ -193,7 +193,7 @@ def main(args):
 
         if args.save_log and args.log_path:
             with open(args.log_path, 'w') as logfile:
-                logfile.write(time.asctime())
+                logfile.write('%s\n' % time.asctime())
             print('Writing logs into %s' % args.log_path)
 
         time_begin = time.time()
@@ -227,7 +227,7 @@ def main(args):
                     if args.save_log and args.log_path:
                         with open(args.log_path, 'a') as logfile:
                             logfile.write("epoch: %d, progress: %d/%d, step: %d, loss: %f, " \
-                                       "f1: %f, precision: %f, recall: %f" % (
+                                       "f1: %f, precision: %f, recall: %f\n" % (
                                 current_epoch,current_example, num_train_examples,
                                 steps, outputs["loss"], outputs["f1"],
                                 outputs["precision"], outputs["recall"]))
