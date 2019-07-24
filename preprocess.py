@@ -4,8 +4,6 @@ Created: July 19, 2019
 Description:
 Pre-process datasets to satisfy the format of ERNIE.
 
-Todo:
-
 
 '''
 
@@ -164,15 +162,15 @@ class NERTransformer(object):
         print("Json instances: %d" % len(instances))
 
         transformed = []
-        n_overlap = 0
+        n_total, n_overlap = 0, 0
         for i, d in enumerate(instances):
             if i % 10000 == 0:
                 print('Processed %d documents.' % i)
-
+            n_total += len(d.get('entity_list', []))
             n_overlap += self._transform_one(d)[0]
             transformed.append(self._transform_one(d)[1])
 
-        print('Total overlapped entities: %d' % n_overlap)
+        print('(Entities) Total: %d, Overlapped: %d, Labelled: %d' % (n_total, n_overlap, n_total-n_overlap))
 
         return transformed
 
@@ -214,6 +212,7 @@ def arg_parse():
     parser = ArgumentParser()
     parser.add_argument('--data', type=FileType('r'), help='Input json file')
     parser.add_argument('--output', type=FileType('w'), help='Output tsv file')
+
     return parser.parse_args()
 
 
@@ -223,12 +222,12 @@ def main():
     data_original = [json.loads(line) for line in args.data]
     instances = transform_json(data_original)
 
-    transformer = RelationTransformer(downsample=True)
-    # transformer = NERTransformer()
+    # transformer = RelationTransformer(downsample=True)
+    transformer = NERTransformer()
 
     transformed = transformer.transform(instances)
     # pprint(transformed)
-    write2tsv(f = args.output, unpacked = transformed)
+    # write2tsv(f = args.output, unpacked = transformed)
 
 
 if __name__ == '__main__':
