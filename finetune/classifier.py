@@ -238,7 +238,7 @@ def evaluate_ske(exe, test_program, test_pyreader, graph_vars, eval_phase):
             total_num_seqs += np.sum(np_num_seqs)
             labels.extend(np_labels.reshape((-1)).tolist())
             preds.extend(np_preds.tolist())
-            if current_batch % 100 == 0:
+            if current_batch % 1000 == 0:
                 print('batch %d, elapsed time: %f' % (current_batch, time.time()-batch_time_begin))
             current_batch += 1
 
@@ -248,11 +248,12 @@ def evaluate_ske(exe, test_program, test_pyreader, graph_vars, eval_phase):
     time_end = time.time()
 
     # calculate p, r f1
-    micro_r = recall_score(y_true=labels, y_pred=preds, average='micro')
-    micro_p = precision_score(y_true=labels, y_pred=preds, average='micro')
+    target_labels = list(range(49))     # excluding 'no_relation'
+    micro_r = recall_score(y_true=labels, y_pred=preds, average='micro', labels=target_labels)
+    micro_p = precision_score(y_true=labels, y_pred=preds, average='micro', labels=target_labels)
 
-    macro_r = recall_score(y_true=labels, y_pred=preds, average='macro')
-    macro_p = precision_score(y_true=labels, y_pred=preds, average='macro')
+    macro_r = recall_score(y_true=labels, y_pred=preds, average='macro', labels=target_labels)
+    macro_p = precision_score(y_true=labels, y_pred=preds, average='macro', labels=target_labels)
 
     if not micro_p or not macro_p:
         micro_f, macro_f = 0.0, 0.0
