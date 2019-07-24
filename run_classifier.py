@@ -228,7 +228,7 @@ def main(args):
                         with open(args.log_path, 'a') as logfile:
                             logfile.write("epoch: %d, progress: %d/%d, step: %d, "
                           "ave loss: %.4f, ave_acc: %.4f, micro_f1: %.4f, micro_p: %.4f, micro_r: %.4f, "
-                          "speed: %f steps/s" %
+                          "speed: %f steps/s\n" %
                           (current_epoch, current_example, num_train_examples, steps,
                            outputs["loss"], outputs["accuracy"], outputs["micro_f"], outputs["micro_p"], outputs["micro_r"],
                            args.skip_steps / used_time))

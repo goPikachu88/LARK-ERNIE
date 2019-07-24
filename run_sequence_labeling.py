@@ -192,6 +192,8 @@ def main(args):
             graph_vars["learning_rate"] = scheduled_lr
 
         if args.save_log and args.log_path:
+            if os.path.exists(args.log_path):
+                raise FileExistsError("Logging file already exists!")
             with open(args.log_path, 'w') as logfile:
                 logfile.write('%s\n' % time.asctime())
             print('Writing logs into %s' % args.log_path)
