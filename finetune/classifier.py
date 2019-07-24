@@ -96,149 +96,91 @@ def create_model(args, pyreader_name, ernie_config, is_prediction=False):
     return pyreader, graph_vars
 
 
-def evaluate_mrr(preds):
-    last_qid = None
-    total_mrr = 0.0
-    qnum = 0.0
-    rank = 0.0
-    correct = False
-    for qid, score, label in preds:
-        if qid != last_qid:
-            rank = 0.0
-            qnum += 1
-            correct = False
-            last_qid = qid
+def calculate_metrics(y_true, y_pred, labels):
+    micro_r = recall_score(y_true, y_pred, average='micro', labels=labels)
+    micro_p = precision_score(y_true, y_pred, average='micro', labels=labels)
 
-        rank += 1
-        if not correct and label != 0:
-            total_mrr += 1.0 / rank
-            correct = True
+    macro_r = recall_score(y_true, y_pred, average='macro', labels=labels)
+    macro_p = precision_score(y_true, y_pred, average='macro', labels=labels)
 
-    return total_mrr / qnum
-
-
-def evaluate_map(preds):
-    def singe_map(st, en):
-        total_p = 0.0
-        correct_num = 0.0
-        for index in xrange(st, en):
-            if int(preds[index][2]) != 0:
-                correct_num += 1
-                total_p += correct_num / (index - st + 1)
-        if int(correct_num) == 0:
-            return 0.0
-        return total_p / correct_num
-
-    last_qid = None
-    total_map = 0.0
-    qnum = 0.0
-    st = 0
-    for i in xrange(len(preds)):
-        qid = preds[i][0]
-        if qid != last_qid:
-            qnum += 1
-            if last_qid != None:
-                total_map += singe_map(st, i)
-            st = i
-            last_qid = qid
-
-    total_map += singe_map(st, len(preds))
-    return total_map / qnum
-
-
-def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
-    train_fetch_list = [
-        graph_vars["loss"].name, graph_vars["accuracy"].name,
-        graph_vars["num_seqs"].name
-    ]
-
-    if eval_phase == "train":
-        if "learning_rate" in graph_vars:
-            train_fetch_list.append(graph_vars["learning_rate"].name)
-        outputs = exe.run(fetch_list=train_fetch_list)
-        ret = {"loss": np.mean(outputs[0]), "accuracy": np.mean(outputs[1])}
-        if "learning_rate" in graph_vars:
-            ret["learning_rate"] = float(outputs[3][0])
-        return ret
-
-    test_pyreader.start()
-    total_cost, total_acc, total_num_seqs, total_label_pos_num, total_pred_pos_num, total_correct_num = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    qids, labels, scores = [], [], []
-    time_begin = time.time()
-
-    fetch_list = [
-        graph_vars["loss"].name, graph_vars["accuracy"].name,
-        graph_vars["probs"].name, graph_vars["labels"].name,
-        graph_vars["num_seqs"].name, graph_vars["qids"].name
-    ]
-    while True:
-        try:
-            np_loss, np_acc, np_probs, np_labels, np_num_seqs, np_qids = exe.run(
-                program=test_program, fetch_list=fetch_list)
-            total_cost += np.sum(np_loss * np_num_seqs)
-            total_acc += np.sum(np_acc * np_num_seqs)
-            total_num_seqs += np.sum(np_num_seqs)
-            labels.extend(np_labels.reshape((-1)).tolist())
-            if np_qids is None:
-                np_qids = np.array([])
-            qids.extend(np_qids.reshape(-1).tolist())
-            scores.extend(np_probs[:, 1].reshape(-1).tolist())
-            np_preds = np.argmax(np_probs, axis=1).astype(np.float32)
-            total_label_pos_num += np.sum(np_labels)    # only for binary classification
-            total_pred_pos_num += np.sum(np_preds)
-            total_correct_num += np.sum(np.dot(np_preds, np_labels))
-        except fluid.core.EOFException:
-            test_pyreader.reset()
-            break
-    time_end = time.time()
-
-    if len(qids) == 0:
-        print(
-            "[%s evaluation] ave loss: %f, ave acc: %f, data_num: %d, elapsed time: %f s"
-            % (eval_phase, total_cost / total_num_seqs, total_acc /
-               total_num_seqs, total_num_seqs, time_end - time_begin))
+    if not micro_p or not macro_p:
+        micro_f, macro_f = 0.0, 0.0
     else:
-        r = total_correct_num / total_label_pos_num
-        p = total_correct_num / total_pred_pos_num
-        f = 2 * p * r / (p + r)
+        micro_f = 2 * micro_p * micro_r / (micro_p + micro_r)
+        macro_f = 2 * macro_p * macro_r / (macro_p + macro_r)
 
-        assert len(qids) == len(labels) == len(scores)
-        preds = sorted(
-            zip(qids, scores, labels), key=lambda elem: (elem[0], -elem[1]))
-        mrr = evaluate_mrr(preds)
-        map = evaluate_map(preds)
-
-        print(
-            "[%s evaluation] ave loss: %f, ave_acc: %f, mrr: %f, map: %f, p: %f, r: %f, f1: %f, data_num: %d, elapsed time: %f s"
-            % (eval_phase, total_cost / total_num_seqs,
-               total_acc / total_num_seqs, mrr, map, p, r, f, total_num_seqs,
-               time_end - time_begin))
+    metrics = dict(micro_r=micro_r, micro_p=micro_p, micro_f=micro_f,
+                   macro_r=macro_r, macro_p=macro_p, macro_f=macro_f)
+    return metrics
 
 
 def evaluate_ske(exe, test_program, test_pyreader, graph_vars, eval_phase):
+
+    target_labels = list(range(49))     # excluding 'no_relation'
+
+    # ******************     Training Phase    ************************
+    if eval_phase == "train":
+        train_fetch_list = [
+            graph_vars["loss"].name,
+            graph_vars["accuracy"].name,
+            graph_vars["probs"].name,
+            graph_vars["labels"].name
+        ]
+        if "learning_rate" in graph_vars:
+            train_fetch_list.append(graph_vars["learning_rate"].name)
+
+        outputs = exe.run(fetch_list=train_fetch_list)
+
+        preds = np.argmax(outputs[2], axis=1).astype(np.int8).tolist()
+        labels = outputs[3].reshape((-1)).tolist()
+        metrics = calculate_metrics(y_true=labels, y_pred=preds, labels = target_labels)
+
+        ret = {"loss": np.mean(outputs[0]),
+               "accuracy": np.mean(outputs[1]),
+               "micro_p": metrics["micro_p"],
+               "micro_r": metrics["micro_r"],
+               "micro_f": metrics["micro_f"],
+               "macro_p": metrics["macro_p"],
+               "macro_r": metrics["macro_r"],
+               "macro_f": metrics["macro_f"],
+               }
+        if "learning_rate" in graph_vars:
+            ret["learning_rate"] = float(outputs[-1][0])
+
+        return ret
+
+
+    # **************     Evaluation Phase    **************************
     test_pyreader.start()
+    time_begin = time.time()
+
     total_cost, total_acc, total_num_seqs, total_label_pos_num, total_pred_pos_num, total_correct_num = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     preds, labels, scores = [], [], []
-    time_begin = time.time()
     current_batch = 0
 
     fetch_list = [
-        graph_vars["loss"].name, graph_vars["accuracy"].name,
-        graph_vars["probs"].name, graph_vars["labels"].name,
-        graph_vars["num_seqs"].name, graph_vars["qids"].name
+        graph_vars["loss"].name,
+        graph_vars["accuracy"].name,
+        graph_vars["probs"].name,
+        graph_vars["labels"].name,
+        graph_vars["num_seqs"].name
     ]
     while True:     # evaluate by batch
         try:
             batch_time_begin = time.time()
-            np_loss, np_acc, np_probs, np_labels, np_num_seqs, np_qids = exe.run(
-                program=test_program, fetch_list=fetch_list)
+
+            np_loss, np_acc, np_probs, np_labels, np_num_seqs = exe.run(
+                program=test_program,
+                fetch_list=fetch_list)
             np_preds = np.argmax(np_probs, axis=1).astype(np.int8)
             total_cost += np.sum(np_loss * np_num_seqs)
             total_acc += np.sum(np_acc * np_num_seqs)
             total_num_seqs += np.sum(np_num_seqs)
+
             labels.extend(np_labels.reshape((-1)).tolist())
             preds.extend(np_preds.tolist())
-            if current_batch % 1000 == 0:
+
+            if current_batch % 5000 == 0:
                 print('batch %d, elapsed time: %f' % (current_batch, time.time()-batch_time_begin))
             current_batch += 1
 
@@ -248,24 +190,14 @@ def evaluate_ske(exe, test_program, test_pyreader, graph_vars, eval_phase):
     time_end = time.time()
 
     # calculate p, r f1
-    target_labels = list(range(49))     # excluding 'no_relation'
-    micro_r = recall_score(y_true=labels, y_pred=preds, average='micro', labels=target_labels)
-    micro_p = precision_score(y_true=labels, y_pred=preds, average='micro', labels=target_labels)
-
-    macro_r = recall_score(y_true=labels, y_pred=preds, average='macro', labels=target_labels)
-    macro_p = precision_score(y_true=labels, y_pred=preds, average='macro', labels=target_labels)
-
-    if not micro_p or not macro_p:
-        micro_f, macro_f = 0.0, 0.0
-    else:
-        micro_f = 2 * micro_p * micro_r / (micro_p + micro_r)
-        macro_f = 2 * macro_p * macro_r / (macro_p + macro_r)
+    metrics = calculate_metrics(y_true=labels, y_pred=preds, labels=target_labels)
 
     print(
         "[%s evaluation] ave loss: %f, ave_acc: %f, macro_p: %f, macro_r: %f, macro_f: %f, micro_p: %f, micro_r: %f, micro_f: %f, data_num: %d, elapsed time: %f s"
-        % (eval_phase, total_cost / total_num_seqs,
+        % (eval_phase,
+           total_cost / total_num_seqs,
            total_acc / total_num_seqs,
-           macro_p, macro_r, macro_f,
-           micro_p, micro_r, micro_f,
+           metrics['macro_p'], metrics['macro_r'], metrics['macro_f'],
+           metrics['micro_p'], metrics['micro_r'], metrics['micro_f'],
            total_num_seqs,
            time_end - time_begin))

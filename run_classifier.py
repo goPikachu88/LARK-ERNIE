@@ -188,6 +188,13 @@ def main(args):
         if warmup_steps > 0:
             graph_vars["learning_rate"] = scheduled_lr
 
+        if args.save_log and args.log_path:
+            if os.path.exists(args.log_path):
+                raise FileExistsError("Logging file already exists!")
+            with open(args.log_path, 'w') as logfile:
+                logfile.write('%s\n' % time.asctime())
+            print('Writing logs into %s' % args.log_path)
+
         time_begin = time.time()
         while True:
             try:
@@ -209,11 +216,24 @@ def main(args):
                     current_example, current_epoch = reader.get_train_progress()
                     time_end = time.time()
                     used_time = time_end - time_begin
-                    print("epoch: %d, progress: %d/%d, step: %d, ave loss: %f, "
-                          "ave acc: %f, speed: %f steps/s" %
-                          (current_epoch, current_example, num_train_examples,
-                           steps, outputs["loss"], outputs["accuracy"],
+                    print("epoch: %d, progress: %d/%d, step: %d, "
+                          "ave loss: %.4f, micro_f1: %.4f, micro_p: %.4f, micro_r: %.4f, "
+                          "speed: %f steps/s" %
+                          (current_epoch, current_example, num_train_examples, steps,
+                           outputs["loss"], outputs["micro_f"], outputs["micro_p"], outputs["micro_r"],
                            args.skip_steps / used_time))
+
+                    # Todo: complete logging function
+                    # Todo: print more useful metrics: f1/p/r instead of acc
+                    if args.save_log and args.log_path:
+                        with open(args.log_path, 'a') as logfile:
+                            logfile.write("epoch: %d, progress: %d/%d, step: %d, "
+                          "ave loss: %.4f, ave_acc: %.4f, micro_f1: %.4f, micro_p: %.4f, micro_r: %.4f, "
+                          "speed: %f steps/s" %
+                          (current_epoch, current_example, num_train_examples, steps,
+                           outputs["loss"], outputs["accuracy"], outputs["micro_f"], outputs["micro_p"], outputs["micro_r"],
+                           args.skip_steps / used_time))
+
                     time_begin = time.time()
 
                 if steps % args.save_steps == 0:
@@ -257,7 +277,8 @@ def main(args):
                 epoch=1,
                 shuffle=False))
         print("Final validation result:")
-        evaluate(exe, test_prog, test_pyreader, graph_vars, "dev")
+        # evaluate(exe, test_prog, test_pyreader, graph_vars, "dev")
+        evaluate_ske(exe, test_prog, test_pyreader, graph_vars, "dev")
 
     # final eval on test set
     if args.do_test:
