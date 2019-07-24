@@ -114,7 +114,7 @@ def calculate_metrics(y_true, y_pred, labels):
     return metrics
 
 
-def evaluate_ske(exe, test_program, test_pyreader, graph_vars, eval_phase):
+def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
 
     target_labels = list(range(49))     # excluding 'no_relation'
 
