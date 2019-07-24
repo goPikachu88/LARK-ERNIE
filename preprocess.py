@@ -20,11 +20,12 @@ from tokenization import FullTokenizer
 
 
 class RelationTransformer(object):
-    def __init__(self, relation_mask='[MASK]', ordered=True, none_label='no_relation', **kwargs):
+    def __init__(self, relation_mask='[MASK]', ordered=True, none_label='no_relation', downsample=False,  **kwargs):
         super().__init__(**kwargs)
         self.relation_mask = relation_mask
         self.ordered = ordered
         self.none_label = none_label
+        self.downsample = downsample
 
 
     def _transform_one(self, instance):
@@ -85,9 +86,25 @@ class RelationTransformer(object):
         n_pos = len([r for r in relations if r['label'] != self.none_label])
         print('Relation instances (positive): %d (%.2f%%)' % (n_pos, n_pos/len(relations)*100))
 
+        if self.downsample:
+            relations = self._downsample_negative(relations)
         random.Random(4).shuffle(relations)
 
         return relations
+
+
+    def _downsample_negative(self, instances):
+        positive = [ins for ins in instances if ins['label'] != self.none_label]
+        negative = [ins for ins in instances if ins['label'] == self.none_label]
+
+        selected = random.Random(4).sample(negative, len(positive))        # pos:neg = 1:1
+        selected += positive
+        assert len(selected) == len(positive)*2
+
+        # random.Random(4).shuffle(selected)
+        print('Downsampled to POS:NEG=1:1')
+
+        return selected
 
 
 class NERTransformer(object):
@@ -206,8 +223,8 @@ def main():
     data_original = [json.loads(line) for line in args.data]
     instances = transform_json(data_original)
 
-    # transformer = RelationTransformer()
-    transformer = NERTransformer()
+    transformer = RelationTransformer(downsample=True)
+    # transformer = NERTransformer()
 
     transformed = transformer.transform(instances)
     # pprint(transformed)
