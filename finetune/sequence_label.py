@@ -64,10 +64,12 @@ def create_model(args, pyreader_name, ernie_config, is_prediction=False):
             name="cls_seq_label_out_b",
             initializer=fluid.initializer.Constant(0.)))
 
-    ret_labels = fluid.layers.reshape(x=labels, shape=[-1, 1])
-    ret_infers = fluid.layers.reshape(
-        x=fluid.layers.argmax(
-            logits, axis=2), shape=[-1, 1])
+    # ret_labels = fluid.layers.reshape(x=labels, shape=[-1, 1])
+    # ret_infers = fluid.layers.reshape(
+    #     x=fluid.layers.argmax(
+    #         logits, axis=2), shape=[-1, 1])
+    ret_labels = labels
+    ret_infers = fluid.layers.argmax(logits, axis=2)
 
     labels = fluid.layers.flatten(labels, axis=2)
     ce_loss, probs = fluid.layers.softmax_with_cross_entropy(
@@ -236,6 +238,10 @@ def evaluate(exe,
             try:
                 np_labels, np_infers, np_lens = exe.run(program=program,
                                                         fetch_list=fetch_list)
+                np_labels = np_labels.reshape(np_labels.shape[0], np_labels.shape[1])            #3d to 2d
+                np_labels = np_labels.reshape(-1, 1)            #3d to 2d
+                np_infers = np_infers.reshape(-1, 1)
+
                 label_num, infer_num, correct_num = chunk_eval(
                     np_labels, np_infers, np_lens, tag_num, dev_count)
                 total_infer += infer_num
@@ -253,3 +259,31 @@ def evaluate(exe,
         print(
             "[%s evaluation] f1: %f, precision: %f, recall: %f, elapsed time: %f s"
             % (eval_phase, f1, precision, recall, time_end - time_begin))
+
+
+def predict(exe, program, pyreader, graph_vars, tag_num, eval_phase, dev_count=1):
+    fetch_list = [
+        graph_vars["labels"].name, graph_vars["infers"].name,
+        graph_vars["seq_lens"].name
+    ]
+
+    # total_label, total_infer, total_correct = 0.0, 0.0, 0.0
+    time_begin = time.time()
+    pyreader.start()
+    while True:
+        try:
+            np_labels, np_infers, np_lens = exe.run(program=program,
+                                                    fetch_list=fetch_list)
+            label_num, infer_num, correct_num = chunk_eval(
+                np_labels, np_infers, np_lens, tag_num, dev_count)
+
+        except fluid.core.EOFException:
+            pyreader.reset()
+            break
+
+    time_end = time.time()
+
+    print(
+        "[%s evaluation] prediction is done, elapsed time: %f s"
+        % (eval_phase,  time_end - time_begin)
+    )
