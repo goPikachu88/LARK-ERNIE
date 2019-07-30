@@ -309,7 +309,7 @@ class SequenceLabelReader(BaseReader):
     def _convert_example_to_record(self, example, max_seq_length, tokenizer):
         tokens = tokenization.convert_to_unicode(example.text_a).split(u"")
         labels = tokenization.convert_to_unicode(example.label).split(u"")
-        tokens, labels = self._reseg_token_label(tokens, labels, tokenizer)
+        # tokens, labels = self._reseg_token_label(tokens, labels, tokenizer)
 
         if len(tokens) > max_seq_length - 2:
             tokens = tokens[0:(max_seq_length - 2)]
