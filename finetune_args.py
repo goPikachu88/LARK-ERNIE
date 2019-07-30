@@ -52,7 +52,7 @@ log_g.add_arg("verbose",             bool,   False, "Whether to output verbose l
 log_g.add_arg("save_log",             bool,   False, "Whether to save log file.")
 log_g.add_arg("log_path",             str,   None, "Where to save log file.")
 
-data_g = ArgumentGroup(parser, "data", "Data paths, vocab paths and data processing options")
+data_g = ArgumentGroup(parser, "data", "Data paths, vocab paths and data processlabel_map_configing options")
 data_g.add_arg("train_set",           str,  None,  "Path to training data.")
 data_g.add_arg("test_set",            str,  None,  "Path to test data.")
 data_g.add_arg("dev_set",             str,  None,  "Path to validation data.")
@@ -75,5 +75,6 @@ run_type_g.add_arg("num_iteration_per_drop_scope", int,    10,    "Iteration int
 run_type_g.add_arg("do_train",                     bool,   True,  "Whether to perform training.")
 run_type_g.add_arg("do_val",                       bool,   True,  "Whether to perform evaluation on dev data set.")
 run_type_g.add_arg("do_test",                      bool,   True,  "Whether to perform evaluation on test data set.")
+run_type_g.add_arg("do_predict",                      bool,   True,  "Whether to perform evaluation on test data set.")
 run_type_g.add_arg("metrics",                      bool,   True,  "Whether to perform evaluation on test data set.")
 # yapf: enable

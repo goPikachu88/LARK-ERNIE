@@ -28,7 +28,7 @@ from model.ernie import ErnieConfig
 from optimization import optimization
 from utils.init import init_pretraining_params, init_checkpoint
 from utils.args import print_arguments
-from finetune.sequence_label import create_model, evaluate
+from finetune.sequence_label import create_model, evaluate, predict
 from finetune_args import parser
 
 args = parser.parse_args()
@@ -228,11 +228,11 @@ def main(args):
 
                     if args.save_log and args.log_path:
                         with open(args.log_path, 'a') as logfile:
-                            logfile.write("epoch: %d, progress: %d/%d, step: %d, loss: %f, " \
-                                       "f1: %f, precision: %f, recall: %f\n" % (
-                                current_epoch,current_example, num_train_examples,
-                                steps, outputs["loss"], outputs["f1"],
-                                outputs["precision"], outputs["recall"]))
+                            logfile.write("epoch: %d, progress: %d/%d, step: %d, loss: %f, "
+                                          "f1: %f, precision: %f, recall: %f\n" % (
+                                              current_epoch, current_example, num_train_examples,
+                                              steps, outputs["loss"], outputs["f1"],
+                                              outputs["precision"], outputs["recall"]))
 
                     time_begin = time.time()
 
@@ -280,6 +280,10 @@ def main(args):
         print("Final validation result:")
         evaluate(exe, test_prog, test_pyreader, graph_vars, args.num_labels,
                  "dev")
+        if args.do_predict:
+            print("Saving predicted results...")
+            predict(exe, test_prog, test_pyreader, graph_vars, args.label_map_config,
+                    "test", output_dir="./predicted_results")
 
     # final eval on test set
     if args.do_test:
@@ -292,6 +296,10 @@ def main(args):
         print("Final test result:")
         evaluate(exe, test_prog, test_pyreader, graph_vars, args.num_labels,
                  "test")
+        if args.do_predict:
+            print("Saving predicted results...")
+            predict(exe, test_prog, test_pyreader, graph_vars, args.label_map_config,
+                    "test", output_dir="./predicted_results")
 
 
 if __name__ == '__main__':

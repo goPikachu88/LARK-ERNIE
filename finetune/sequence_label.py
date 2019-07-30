@@ -160,18 +160,18 @@ def chunk_eval(np_labels, np_infers, np_lens, tag_num, dev_count=1):
             infer_index = 0
             label_index = 0
             while label_index < len(label_chunks) \
-                   and infer_index < len(infer_chunks):
+                    and infer_index < len(infer_chunks):
                 if infer_chunks[infer_index]["st"] \
-                    < label_chunks[label_index]["st"]:
+                        < label_chunks[label_index]["st"]:
                     infer_index += 1
                 elif infer_chunks[infer_index]["st"] \
-                    > label_chunks[label_index]["st"]:
+                        > label_chunks[label_index]["st"]:
                     label_index += 1
                 else:
                     if infer_chunks[infer_index]["en"] \
                         == label_chunks[label_index]["en"] \
                         and infer_chunks[infer_index]["type"] \
-                        == label_chunks[label_index]["type"]:
+                            == label_chunks[label_index]["type"]:
                         num_correct += 1
 
                     infer_index += 1
@@ -200,13 +200,7 @@ def calculate_f1(num_label, num_infer, num_correct):
     return precision, recall, f1
 
 
-def evaluate(exe,
-             program,
-             pyreader,
-             graph_vars,
-             tag_num,
-             eval_phase,
-             dev_count=1):
+def evaluate(exe, program, pyreader, graph_vars, tag_num, eval_phase, dev_count=1):
     fetch_list = [
         graph_vars["labels"].name, graph_vars["infers"].name,
         graph_vars["seq_lens"].name
@@ -233,38 +227,22 @@ def evaluate(exe,
 
     else:
         total_label, total_infer, total_correct = 0.0, 0.0, 0.0
-        total_np_labels, total_np_infers = [], []
         time_begin = time.time()
         pyreader.start()
-        counter = 0
-        LABEL_MAP = json.load(open("/home/yue/Data/ernie_processed/0724/ner/label_map_entities_57.json", "r"))
-        LABEL_MAP_REVERSE = {v: k for k, v in LABEL_MAP.items()}
 
         while True:
             try:
                 np_labels, np_infers, np_lens = exe.run(program=program,
                                                         fetch_list=fetch_list)
-                np_labels = np_labels.reshape(np_labels.shape[:-1])  # 3d to 2d
-
-                print('Batch %d' % counter)
-                print("np_labels:", np_labels.shape)
-                print("np_infers:", np_infers.shape)
-                total_np_labels.append(np_labels)
-                total_np_infers.append(np_infers)
-
-                # # save file
-                # np.savetxt("/home/yue/Desktop/pred_batch%s.txt" % counter, np_infers, fmt="%4d", delimiter=",", newline="\n")
-                # np.savetxt("/home/yue/Desktop/actual_batch%s.txt" % counter, np_labels, fmt="%4d", delimiter=",", newline="\n")
-
+                # np_labels = np_labels.reshape(np_labels.shape[:-1])  # 3d to 2d
                 np_labels = np_labels.reshape(-1, 1)
                 np_infers = np_infers.reshape(-1, 1)
+
                 label_num, infer_num, correct_num = chunk_eval(
                     np_labels, np_infers, np_lens, tag_num, dev_count)
                 total_infer += infer_num
                 total_label += label_num
                 total_correct += correct_num
-
-                counter += 1
 
             except fluid.core.EOFException:
                 pyreader.reset()
@@ -277,50 +255,37 @@ def evaluate(exe,
             "[%s evaluation] f1: %f, precision: %f, recall: %f, elapsed time: %f s"
             % (eval_phase, f1, precision, recall, time_end - time_begin))
 
-        # save file
-        with open("/home/yue/Desktop/pred.txt", "w") as f:
-            for _np_infers in total_np_infers:
-                # f.write("\n".join(" ".join(map(str, x)) for x in _np_infers))     # save ids
-                f.write("\n".join(" ".join([LABEL_MAP_REVERSE[_t] for _t in x]) for x in _np_infers))           # save text labels
-                f.write("\n")
 
-        with open("/home/yue/Desktop/actual.txt", "w") as f:
-            for _np_infers in total_np_labels:
-                f.write("\n".join(" ".join([LABEL_MAP_REVERSE[_t] for _t in x]) for x in _np_infers))
-                f.write("\n")
-
-
-def predict(exe, program, pyreader, graph_vars, tag_num, eval_phase, dev_count=1):
+def predict(exe, program, pyreader, graph_vars, label_map_config, eval_phase, output_dir):
+    '''
+    Do not calculate metrics.
+    Load a pre-trained ERNIE model to predict NER labels, and save results.
+    '''
     fetch_list = [
-        graph_vars["labels"].name, graph_vars["infers"].name,
+        graph_vars["labels"].name,
+        graph_vars["infers"].name,
         graph_vars["seq_lens"].name
     ]
+    LABEL2ID_MAP = json.load(open(label_map_config, "r"))
+    ID2LABEL_MAP = {v: k for k, v in LABEL2ID_MAP.items()}
 
-    # total_label, total_infer, total_correct = 0.0, 0.0, 0.0
     total_np_labels, total_np_infers = [], []
     time_begin = time.time()
     pyreader.start()
-
-    counter = 0
+    # counter = 0
     while True:
         try:
-            np_labels, np_infers, np_lens = exe.run(program=program,
-                                                    fetch_list=fetch_list)
+            np_labels, np_infers, np_lens = exe.run(program=program, fetch_list=fetch_list)
             np_labels = np_labels.reshape(np_labels.shape[:-1])  # 3d to 2d
-
-            # save file
-            np.savetxt("/home/yue/Desktop/pred_batch%s.txt" % counter, np_infers, fmt="%4d", delimiter=",", newline="\n")
-            np.savetxt("/home/yue/Desktop/actual_batch%s.txt" % counter, np_labels, fmt="%4d", delimiter=",", newline="\n")
-
-            print('Batch %d' % counter)
-            print("np_labels:", np_labels.shape)
-            print("np_infers:", np_infers.shape)
+            # print('Batch %d' % counter)
+            # print("np_labels:", np_labels.shape)
+            # print("np_infers:", np_infers.shape)
+            # # save batch predictions
+            # np.savetxt("~/pred_batch%s.txt" % counter, np_infers, fmt="%4d", delimiter=",", newline="\n")
+            # np.savetxt("~/actual_batch%s.txt" % counter, np_labels, fmt="%4d", delimiter=",", newline="\n")
+            # counter += 1
             total_np_labels.append(np_labels)
             total_np_infers.append(np_infers)
-            # np_labels = np_labels.reshape(-1, 1)  # 2d to 1d
-            # np_infers = np_infers.reshape(-1, 1)
-
-            counter += 1
 
         except fluid.core.EOFException:
             pyreader.reset()
@@ -329,9 +294,19 @@ def predict(exe, program, pyreader, graph_vars, tag_num, eval_phase, dev_count=1
     time_end = time.time()
     print(
         "[%s prediction] prediction is done, elapsed time: %f s"
-        % (eval_phase,  time_end - time_begin)
+        % (eval_phase, time_end - time_begin)
     )
 
     # save file
-    np.savetxt("/home/yue/Desktop/pred.txt", np.vstack(total_np_infers), fmt="%4d", delimiter=",", newline="\n")
-    np.savetxt("/home/yue/Desktop/actual.txt", np.vstack(total_np_labels), fmt="%4d", delimiter=",", newline="\n")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    with open("%s/pred.txt" % output_dir, "w") as f:
+        for _np_infers in total_np_infers:
+            # f.write("\n".join(" ".join(map(str, x)) for x in _np_infers))     # save ids
+            f.write("\n".join(" ".join([ID2LABEL_MAP[_t] for _t in x]) for x in _np_infers))  # save text labels
+            f.write("\n")
+
+    with open("%s/actual.txt" % output_dir, "w") as f:
+        for _np_labels in total_np_labels:
+            f.write("\n".join(" ".join([ID2LABEL_MAP[_t] for _t in x]) for x in _np_labels))
+            f.write("\n")
