@@ -21,6 +21,7 @@ import time
 import argparse
 import numpy as np
 import multiprocessing
+import json
 
 import paddle
 import paddle.fluid as fluid
@@ -68,8 +69,8 @@ def create_model(args, pyreader_name, ernie_config, is_prediction=False):
     # ret_infers = fluid.layers.reshape(
     #     x=fluid.layers.argmax(
     #         logits, axis=2), shape=[-1, 1])
-    ret_labels = labels
-    ret_infers = fluid.layers.argmax(logits, axis=2)
+    ret_labels = labels             # (batch_size, max_len, 1)
+    ret_infers = fluid.layers.argmax(logits, axis=2)           # (batch_size, max_len)
 
     labels = fluid.layers.flatten(labels, axis=2)
     ce_loss, probs = fluid.layers.softmax_with_cross_entropy(
@@ -232,33 +233,61 @@ def evaluate(exe,
 
     else:
         total_label, total_infer, total_correct = 0.0, 0.0, 0.0
+        total_np_labels, total_np_infers = [], []
         time_begin = time.time()
         pyreader.start()
+        counter = 0
+        LABEL_MAP = json.load(open("/home/yue/Data/ernie_processed/0724/ner/label_map_entities_57.json", "r"))
+        LABEL_MAP_REVERSE = {v: k for k, v in LABEL_MAP.items()}
+
         while True:
             try:
                 np_labels, np_infers, np_lens = exe.run(program=program,
                                                         fetch_list=fetch_list)
-                np_labels = np_labels.reshape(np_labels.shape[0], np_labels.shape[1])            #3d to 2d
-                np_labels = np_labels.reshape(-1, 1)            #3d to 2d
-                np_infers = np_infers.reshape(-1, 1)
+                np_labels = np_labels.reshape(np_labels.shape[:-1])  # 3d to 2d
 
+                print('Batch %d' % counter)
+                print("np_labels:", np_labels.shape)
+                print("np_infers:", np_infers.shape)
+                total_np_labels.append(np_labels)
+                total_np_infers.append(np_infers)
+
+                # # save file
+                # np.savetxt("/home/yue/Desktop/pred_batch%s.txt" % counter, np_infers, fmt="%4d", delimiter=",", newline="\n")
+                # np.savetxt("/home/yue/Desktop/actual_batch%s.txt" % counter, np_labels, fmt="%4d", delimiter=",", newline="\n")
+
+                np_labels = np_labels.reshape(-1, 1)
+                np_infers = np_infers.reshape(-1, 1)
                 label_num, infer_num, correct_num = chunk_eval(
                     np_labels, np_infers, np_lens, tag_num, dev_count)
                 total_infer += infer_num
                 total_label += label_num
                 total_correct += correct_num
 
+                counter += 1
+
             except fluid.core.EOFException:
                 pyreader.reset()
                 break
 
-        precision, recall, f1 = calculate_f1(total_label, total_infer,
-                                             total_correct)
+        precision, recall, f1 = calculate_f1(total_label, total_infer, total_correct)
         time_end = time.time()
 
         print(
             "[%s evaluation] f1: %f, precision: %f, recall: %f, elapsed time: %f s"
             % (eval_phase, f1, precision, recall, time_end - time_begin))
+
+        # save file
+        with open("/home/yue/Desktop/pred.txt", "w") as f:
+            for _np_infers in total_np_infers:
+                # f.write("\n".join(" ".join(map(str, x)) for x in _np_infers))     # save ids
+                f.write("\n".join(" ".join([LABEL_MAP_REVERSE[_t] for _t in x]) for x in _np_infers))           # save text labels
+                f.write("\n")
+
+        with open("/home/yue/Desktop/actual.txt", "w") as f:
+            for _np_infers in total_np_labels:
+                f.write("\n".join(" ".join([LABEL_MAP_REVERSE[_t] for _t in x]) for x in _np_infers))
+                f.write("\n")
 
 
 def predict(exe, program, pyreader, graph_vars, tag_num, eval_phase, dev_count=1):
@@ -268,22 +297,41 @@ def predict(exe, program, pyreader, graph_vars, tag_num, eval_phase, dev_count=1
     ]
 
     # total_label, total_infer, total_correct = 0.0, 0.0, 0.0
+    total_np_labels, total_np_infers = [], []
     time_begin = time.time()
     pyreader.start()
+
+    counter = 0
     while True:
         try:
             np_labels, np_infers, np_lens = exe.run(program=program,
                                                     fetch_list=fetch_list)
-            label_num, infer_num, correct_num = chunk_eval(
-                np_labels, np_infers, np_lens, tag_num, dev_count)
+            np_labels = np_labels.reshape(np_labels.shape[:-1])  # 3d to 2d
+
+            # save file
+            np.savetxt("/home/yue/Desktop/pred_batch%s.txt" % counter, np_infers, fmt="%4d", delimiter=",", newline="\n")
+            np.savetxt("/home/yue/Desktop/actual_batch%s.txt" % counter, np_labels, fmt="%4d", delimiter=",", newline="\n")
+
+            print('Batch %d' % counter)
+            print("np_labels:", np_labels.shape)
+            print("np_infers:", np_infers.shape)
+            total_np_labels.append(np_labels)
+            total_np_infers.append(np_infers)
+            # np_labels = np_labels.reshape(-1, 1)  # 2d to 1d
+            # np_infers = np_infers.reshape(-1, 1)
+
+            counter += 1
 
         except fluid.core.EOFException:
             pyreader.reset()
             break
 
     time_end = time.time()
-
     print(
-        "[%s evaluation] prediction is done, elapsed time: %f s"
+        "[%s prediction] prediction is done, elapsed time: %f s"
         % (eval_phase,  time_end - time_begin)
     )
+
+    # save file
+    np.savetxt("/home/yue/Desktop/pred.txt", np.vstack(total_np_infers), fmt="%4d", delimiter=",", newline="\n")
+    np.savetxt("/home/yue/Desktop/actual.txt", np.vstack(total_np_labels), fmt="%4d", delimiter=",", newline="\n")
