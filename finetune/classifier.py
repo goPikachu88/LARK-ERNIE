@@ -201,3 +201,50 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
            metrics['micro_p'], metrics['micro_r'], metrics['micro_f'],
            total_num_seqs,
            time_end - time_begin))
+
+
+# Todo
+def predict(exe, test_program, test_pyreader, graph_vars):
+    target_labels = list(range(49))  # excluding 'no_relation'
+
+    fetch_list = [
+        graph_vars["loss"].name,
+        graph_vars["accuracy"].name,
+        graph_vars["probs"].name,
+        graph_vars["labels"].name,
+        graph_vars["num_seqs"].name
+    ]
+
+    total_cost, total_acc, total_num_seqs, total_label_pos_num, total_pred_pos_num, total_correct_num = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    preds, labels, scores = [], [], []
+    current_batch = 0
+
+    test_pyreader.start()
+    time_begin = time.time()
+    while True:         # evaluate by batch
+        try:
+            batch_time_begin = time.time()
+
+            np_loss, np_acc, np_probs, np_labels, np_num_seqs = exe.run(
+                program=test_program,
+                fetch_list=fetch_list)
+            np_preds = np.argmax(np_probs, axis=1).astype(np.int8)
+            total_num_seqs += np.sum(np_num_seqs)
+
+            labels.extend(np_labels.reshape((-1)).tolist())
+            preds.extend(np_preds.tolist())
+
+            if current_batch % 5000 == 0:
+                print('batch %d, elapsed time: %f' % (current_batch, time.time() - batch_time_begin))
+            current_batch += 1
+
+        except fluid.core.EOFException:
+            test_pyreader.reset()
+            break
+    time_end = time.time()
+
+    print("Prediction completed, elapsed time: %f s" % (time_end - time_begin))
+
+    # Todo: return preds with texts ?
+    return preds
+
