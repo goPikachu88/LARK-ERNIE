@@ -226,8 +226,8 @@ def main():
     transformer = NERTransformer()
 
     transformed = transformer.transform(instances)
-    # pprint(transformed)
-    # write2tsv(f = args.output, unpacked = transformed)
+    # pprint(transformed[:10])
+    write2tsv(f = args.output, unpacked = transformed)
 
 
 if __name__ == '__main__':
