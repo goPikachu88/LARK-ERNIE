@@ -19,85 +19,157 @@ Format:
     查	B-人物	B-人物
     尔	I-人物	I-人物
     斯	I-人物	I-人物
-    [UNK]	I-人物	I-人物
-    阿	I-人物	I-人物
-    兰	I-人物	I-人物
-    基	I-人物	I-人物
-    斯	I-人物	I-人物
-    （	O	O
-    charles	O	O
-    ar	O	O
-    ##ang	O	O
-    ##ui	O	O
-    ##z	O	O
-    ）	O	O
-    ，	O	O
 
 Desired Output:
-
+A .tsv file with two columns: label, text_a.
+    'text_a' should be masks subj and obj
+    'label' is mapped to relation id
 
 '''
 
 import os
 import json
 from collections import namedtuple
-from preprocess import RelationTransformer
+from pprint import pprint
+from preprocess import write2tsv
+from itertools import permutations
+from argparse import ArgumentParser, FileType
+import csv
 
 
 
+class NEROutputTransformer(object):
+
+    def read_file(self, fpath):
+        f = open(fpath, 'r').readlines()
+        headers = f[0].rstrip().split('\t')
+        lines = [line.rstrip() for line in f[1:]]
+        Example = namedtuple('Example', headers)
+
+        doc_starts = [i for i, line in enumerate(lines) if line.startswith("#dev-")] + [len(lines)]         # add end
+        # print(len(doc_starts))
+
+        docs = []
+        for i in range(len(doc_starts) - 1):
+            _start = doc_starts[i]
+            _end = doc_starts[i + 1]
+            docid = lines[_start].strip("#")
+            doc_lines = [line.split('\t') for line in lines[_start + 1:_end] if line not in ['\n', '']]         # remove blank rows
+            doc_lines = [Example(*line) for line in doc_lines]
+
+            docs.append(dict(docid=docid,
+                             lines=doc_lines))
+        return docs
 
 
-def extract_entities(doc):
-    '''
-    Input format:
-        {'docid': 'dev-0',
-        'lines': ['查\tB-人物\tB-人物', '尔\tI-人物\tI-人物', '斯\tI-人物\tI-人物', '[UNK]\tI-人物\tI-人物', '阿\tI-人物\tI-人物', '兰\tI-人物\tI-人物', '基\tI-人物\tI-人物', '斯\tI-人物\tI-人物', '（\tO\tO', 'charles\tO\tO', 'ar\tO\tO', '##ang\tO\tO', '##ui\tO\tO', '##z\tO\tO', '）\tO\tO', '，\tO\tO', '1989\tB-Date\tB-Date', '年\tI-Date\tI-Date', '4\tI-Date\tI-Date', '月\tI-Date\tI-Date', '17\tI-Date\tI-Date', '日\tI-Date\tI-Date', '出\tO\tO', '生\tO\tO', '于\tO\tO', '智\tO\tB-国家', '利\tO\tI-国家', '圣\tB-地点\tB-地点', '地\tI-地点\tI-地点', '亚\tI-地点\tI-地点', '哥\tI-地点\tI-地点']}
+    def transform(self, docs):
+        '''
+        Input format:
+            {'docid': 'dev-0',
+            'lines': [Example(Char='查', Actual='B-人物', Pred='B-人物'),
+                    Example(Char='尔', Actual='I-人物', Pred='I-人物'),
+                    Example(Char='斯', Actual='I-人物', Pred='I-人物')]
+            }
+        Output format:
+            {'docid': 'dev-0',
+            'text': str, entities masked
+            }
+        '''
+        relation_mask = '[MASK]'
+        transformed = []
+        for d in docs:
+            docid = d.get('docid', '')
+            lines = d.get('lines', [])
+            token_seq = [line.Char for line in lines]
 
-    Output format:
-        {'docid': 'dev-0',
-        'text': str,
-        'gold_entity_list': [],
-        'system_entity_list': []
-        }
-    '''
-    lines = doc.get('lines', [])
+            # gold_labels = [line.Actual for line in lines]
+            # gold_entities = self._extract_entities(token_seq, gold_labels)
 
-    Example = namedtuple('Example', ['text', 'actual', 'pred'])
-    lines = [line.split('\t') for line in lines]
-    print(lines[0])
-    converted = [Example(*line) for line in lines]
-    print(converted[:3])
+            pred_labels = [line.Pred for line in lines]
+            system_entities = self._extract_entities(token_seq, pred_labels)
 
-#     entity_list =
+            # transformed.append(dict(docid = d.get('docid', ''),
+            #                         text = ' '.join(token_seq),      # join the ERNIE tokens to string
+            #                         gold_entity_list = gold_entities,
+            #                         system_entities = system_entities),
+            #                    )
 
-#     return entity_list
+            # pair-wise entity masking.
+            relation_instances = []
+            for subj, obj in permutations(system_entities, 2):  # n entities -> n*(n-1) pairs
+                text = ' '.join(token_seq)
+                text = text.replace(subj['text'], "%s%s" % (relation_mask, relation_mask))
+                text = text.replace(obj['text'], relation_mask)
+
+                relation_instances.append(dict(text_a=text, docid=docid))
+            # end for
+
+            transformed += relation_instances
+
+        return transformed
 
 
-def _read_file(fpath):
-    f = open(fpath, 'r').readlines()
-    headers = f[0].rstrip().split('\t')
-    lines = [line.rstrip() for line in f[1:]]
+    def _extract_entities(self, words, labels):
+        '''
+        Given a sequence of words (tokens) and a sequence of labels,
+        return a list of extracted entities
+        '''
+        assert len(words) == len(labels)
 
-    doc_starts = [i for i, line in enumerate(lines) if line.startswith("#dev-")]
-    print(len(doc_starts))
-    doc_starts.append(len(lines))       # add end
+        B_points = [i for i, x in enumerate(labels) if x.startswith('B-')]
+        if B_points[-1] != len(labels):
+            B_points += [len(labels)]
+        # print(B_points)
 
-    docs = []
-    for i in range(len(doc_starts)-1):
-        start= doc_starts[i]
-        end = doc_starts[i+1]
-        docid = lines[start].strip("#")
-        doc_lines = [line for line in lines[start+1:end] if line not in ['\n', '']]     # remove blank rows
-        docs.append(dict(docid=docid,
-                         lines = doc_lines))
+        entity_list = []
+        for i, b in enumerate(B_points[:-1]):
+            entity_type = labels[b].split('-')[-1]
+            span_left, span_right = b, b        # left & right pointer of an entity span
+            for j in range(span_left, B_points[i + 1]):
+                if labels[j].split('-')[-1] == entity_type:
+                    span_right = j
+            # end for
+            entity_text = ' '.join([tok for tok in words[span_left: span_right + 1]])
 
-    return docs
+            d = dict(
+                text=entity_text,
+                type=entity_type,
+                start_token=span_left,
+                end_token=span_right,
+            )
+            entity_list.append(d)
+        # end for
 
+        return entity_list
+
+
+def arg_parse():
+    parser = ArgumentParser()
+    parser.add_argument('--input', type=FileType('r'), help='3-column NER outputs',
+                        default='/home/yue/Desktop/dev_ner_test.txt')
+    parser.add_argument('--output', type=FileType('w'),
+                        help='Output tsv file for relation classification.',
+                        default='/home/yue/Desktop/dev_ner_test_output.txt')
+
+    return parser.parse_args()
 
 
 def main():
-    docs = _read_file("/home/yue/Desktop/dev_ner_all.txt")
-    extract_entities(docs[0])
+    args = arg_parse()
+
+    transformer = NEROutputTransformer()
+    docs = transformer.read_file(args.input.name)
+
+    transformed = transformer.transform(docs)
+    pprint(transformed[0])
+
+    writer = csv.DictWriter(args.output, fieldnames=['docid', 'text_a'], delimiter='\t')
+    writer.writeheader()
+    for d in transformed:
+        writer.writerow(d)
+    # end for
+    print('File written to %s' % args.output.name)
+
 
 
 
