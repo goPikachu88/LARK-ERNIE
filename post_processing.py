@@ -21,20 +21,15 @@ Format:
     斯	I-人物	I-人物
 
 Desired Output:
-A .tsv file with two columns: label, text_a.
+A .tsv file with two columns: docid, text_a.
     'text_a' should be masks subj and obj
-    'label' is mapped to relation id
 
 '''
-
-import os
-import json
+import csv
 from collections import namedtuple
 from pprint import pprint
-from preprocess import write2tsv
 from itertools import permutations
 from argparse import ArgumentParser, FileType
-import csv
 
 
 
@@ -80,26 +75,28 @@ class NEROutputTransformer(object):
         for d in docs:
             docid = d.get('docid', '')
             lines = d.get('lines', [])
+
             token_seq = [line.Char for line in lines]
-
-            # gold_labels = [line.Actual for line in lines]
-            # gold_entities = self._extract_entities(token_seq, gold_labels)
-
             pred_labels = [line.Pred for line in lines]
             system_entities = self._extract_entities(token_seq, pred_labels)
 
-            # transformed.append(dict(docid = d.get('docid', ''),
-            #                         text = ' '.join(token_seq),      # join the ERNIE tokens to string
-            #                         gold_entity_list = gold_entities,
-            #                         system_entities = system_entities),
-            #                    )
-
-            # pair-wise entity masking.
+            '''Pair-wise Entity Masking
+            
+            Note: system entities may occur multiple times in text, Example:
+            "李 治 即 位 后 ， 萧 淑 妃 受 宠 ， 王 皇 后 为 了 排 挤 萧 淑 妃 ， 答 应 李 治 让 身 在 感 业 寺 的 武 则 天 续 起 头 发 ， 重 新 纳 入 后 宫"
+            
+            "李 治" and "萧 淑 妃" both have 2 occurrences, but we should only mask one.
+            
+            So masking shall be located:
+             1) by token index, or
+             2) by matching the string, but only replace the first occurrence
+            
+            '''
             relation_instances = []
             for subj, obj in permutations(system_entities, 2):  # n entities -> n*(n-1) pairs
                 text = ' '.join(token_seq)
-                text = text.replace(subj['text'], "%s%s" % (relation_mask, relation_mask))
-                text = text.replace(obj['text'], relation_mask)
+                text = text.replace(subj['text'], "%s%s" % (relation_mask, relation_mask), 1)
+                text = text.replace(obj['text'], relation_mask, 1)
 
                 relation_instances.append(dict(text_a=text, docid=docid))
             # end for
@@ -145,11 +142,9 @@ class NEROutputTransformer(object):
 
 def arg_parse():
     parser = ArgumentParser()
-    parser.add_argument('--input', type=FileType('r'), help='3-column NER outputs',
-                        default='/home/yue/Desktop/dev_ner_test.txt')
+    parser.add_argument('--input', type=FileType('r'), help='3-column NER outputs')
     parser.add_argument('--output', type=FileType('w'),
-                        help='Output tsv file for relation classification.',
-                        default='/home/yue/Desktop/dev_ner_test_output.txt')
+                        help='Output tsv file for relation classification.')
 
     return parser.parse_args()
 
