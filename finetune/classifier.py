@@ -203,20 +203,16 @@ def evaluate(exe, test_program, test_pyreader, graph_vars, eval_phase):
            time_end - time_begin))
 
 
-# Todo
 def predict(exe, test_program, test_pyreader, graph_vars):
-    target_labels = list(range(49))  # excluding 'no_relation'
 
     fetch_list = [
-        graph_vars["loss"].name,
-        graph_vars["accuracy"].name,
         graph_vars["probs"].name,
         graph_vars["labels"].name,
         graph_vars["num_seqs"].name
     ]
 
-    total_cost, total_acc, total_num_seqs, total_label_pos_num, total_pred_pos_num, total_correct_num = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    preds, labels, scores = [], [], []
+    total_num_seqs, total_label_pos_num, total_pred_pos_num, total_correct_num = 0.0, 0.0, 0.0, 0.0
+    preds, labels = [], []
     current_batch = 0
 
     test_pyreader.start()
@@ -225,7 +221,7 @@ def predict(exe, test_program, test_pyreader, graph_vars):
         try:
             batch_time_begin = time.time()
 
-            np_loss, np_acc, np_probs, np_labels, np_num_seqs = exe.run(
+            np_probs, np_labels, np_num_seqs = exe.run(
                 program=test_program,
                 fetch_list=fetch_list)
             np_preds = np.argmax(np_probs, axis=1).astype(np.int8)
@@ -234,7 +230,7 @@ def predict(exe, test_program, test_pyreader, graph_vars):
             labels.extend(np_labels.reshape((-1)).tolist())
             preds.extend(np_preds.tolist())
 
-            if current_batch % 5000 == 0:
+            if current_batch % 1000 == 0:
                 print('batch %d, elapsed time: %f' % (current_batch, time.time() - batch_time_begin))
             current_batch += 1
 

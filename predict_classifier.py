@@ -10,38 +10,38 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import json
 import paddle.fluid as fluid
 
 from model.ernie import ErnieConfig
 from finetune.classifier import create_model, predict
 from utils.args import print_arguments
-from utils.init import init_pretraining_params, init_checkpoint
+from utils.init import init_checkpoint
 from finetune_args import parser
 from reader.task_reader import ClassifyReader
 
 args = parser.parse_args()
 
 
-# Todo
-def ensemble_spo():
-    '''
-    receive: subj, obj, docid, relation_label
-    :return: SPO dictionary
-    '''
-
-    return None
-
-
-
 def main(args):
     ernie_config = ErnieConfig(args.ernie_config_path)
-    # ernie_config.print_config()
+    ernie_config.print_config()
 
     if args.use_cuda:
         place = fluid.CUDAPlace(int(os.getenv('FLAGS_selected_gpus', '0')))
     else:
         place = fluid.CPUPlace()
     exe = fluid.Executor(place)
+
+    # Specify data reader
+    reader = ClassifyReader(
+        vocab_path=args.vocab_path,
+        label_map_config=args.label_map_config,
+        max_seq_len=args.max_seq_len,
+        do_lower_case=args.do_lower_case,
+        in_tokens=args.in_tokens,
+        random_seed=args.random_seed
+    )
 
     startup_prog = fluid.Program()
     if args.random_seed is not None:
@@ -68,21 +68,12 @@ def main(args):
         use_fp16=args.use_fp16
     )
 
-    # Specify data reader
-    reader = ClassifyReader(
-        vocab_path=args.vocab_path,
-        label_map_config=args.label_map_config,
-        max_seq_len=args.max_seq_len,
-        do_lower_case=args.do_lower_case,
-        in_tokens=args.in_tokens,
-        random_seed=args.random_seed
-    )
 
     # Get data from reader
     examples = reader._read_tsv(args.test_set)
 
     subjects = [example.subject for example in examples]
-    objects = [example.objects for example in examples]
+    objects = [example.object for example in examples]
     docids = [example.docid for example in examples]
 
     # Predict
@@ -94,18 +85,44 @@ def main(args):
             shuffle=False))     # shuffle must set to false to keep the order
     preds = predict(exe, main_prog, test_pyreader, graph_vars)
 
+
     # Write SPO results
-    assert len(preds) == len(subjects) == len(objects)
-    unique_docs = len(set(docids))
+    assert len(preds) == len(examples)
+    unique_docids = sorted(list(set(docids)))
 
-    for i in range(len(examples)):
-        # Todo
+    LABEL2ID_MAP = json.load(open(args.label_map_config, "r"))
+    ID2LABEL_MAP = {v: k for k, v in LABEL2ID_MAP.items()}
 
 
+    # Assemble SPO by document
+    results = []
+    for _id in unique_docids:
+        indices = [i for i,e in enumerate(examples) if e.docid == _id]
 
+        spo_list = []
+        for i in indices:
+            relation = ID2LABEL_MAP[preds[i]]
+            if relation != 'no_relation':
+                spo = dict(predicate = relation,
+                           subject = subjects[i],
+                           object = objects[i])
+                spo_list.append(spo)
+        # end for
+
+        results.append(dict(docid=_id, spo_list=spo_list))
+    # end for
+
+
+    # Dump SPO results json
+    f_output = '/home/yue/Desktop/dev_predicted.json'
+    with open(f_output, 'w') as f:
+        for r in results:
+            f.write(json.dumps(r, sort_keys=True, ensure_ascii=False))
+            f.write('\n')
+    print('File written to %s' % f_output)
 
 
 
 if __name__ == '__main__':
-    # print_arguments(args)
+    print_arguments(args)
     main(args)
