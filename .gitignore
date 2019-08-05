@@ -2,7 +2,9 @@
 .vscode/
 __pycache__/
 */__pycache__/
+
 data/
+dataset/
+output/
 checkpoints/
-README.md
 logs/

@@ -36,7 +36,7 @@ class NEROutputTransformer(object):
         lines = [line.rstrip() for line in f[1:]]
         Example = namedtuple('Example', headers)
 
-        doc_starts = [i for i, line in enumerate(lines) if line.startswith("#dev-")] + [len(lines)]         # add end
+        doc_starts = [i for i, line in enumerate(lines) if line.startswith("#doc-")] + [len(lines)]         # add end
         # print(len(doc_starts))
 
         docs = []
@@ -55,13 +55,13 @@ class NEROutputTransformer(object):
     def transform(self, docs):
         '''
         Input format:
-            {'docid': 'dev-0',
+            {'docid': 'doc-0',
             'lines': [Example(Char='查', Actual='B-人物', Pred='B-人物'),
                     Example(Char='尔', Actual='I-人物', Pred='I-人物'),
                     Example(Char='斯', Actual='I-人物', Pred='I-人物')]
             }
         Output format:
-            {'docid': str, 'dev-xx',
+            {'docid': str, 'doc-xx',
             'text_a': str, text with entities masked,
             'subject': str,
             'object': str,
